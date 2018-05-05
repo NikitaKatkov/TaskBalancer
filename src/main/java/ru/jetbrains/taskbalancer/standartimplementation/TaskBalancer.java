@@ -6,13 +6,14 @@ import java.util.Random;
 import java.util.concurrent.*;
 
 public class TaskBalancer {
-    public void startBalancing() throws ExecutionException, InterruptedException {
+    // версия из интернета просто чтобы было с чем сравнить - не соответствует тз, но для тестов сойдет
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
         ExecutorService threadPool = Executors.newFixedThreadPool( Runtime.getRuntime().availableProcessors() + 1);
 
         long time = System.currentTimeMillis();
 
         List<Future<Double>> futures = new ArrayList<>();
-        for (int i = 0; i < 400; i++) {
+        for (int i = 0; i < 123; i++) {
             final int j = i;
             futures.add(
                     CompletableFuture.supplyAsync(

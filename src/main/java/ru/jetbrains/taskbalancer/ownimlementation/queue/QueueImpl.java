@@ -19,4 +19,8 @@ public class QueueImpl<T> extends LinkedBlockingQueue<T> {
     public T pollItem() {
         return super.poll();
     }
+
+    public T peekItem() {
+        return super.peek();
+    }
 }

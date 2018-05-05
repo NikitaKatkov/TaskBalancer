@@ -2,7 +2,6 @@ package ru.jetbrains.taskbalancer.ownimlementation.threads;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import ru.jetbrains.taskbalancer.ownimlementation.models.ThreadInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +12,8 @@ public class Balancer {
     private static final Logger LOGGER = LogManager.getLogger(Balancer.class);
     private static final String THREAD_NAME_PATTERN = "thread_%d";
 
-    private List<ThreadInfo> executionThreads = new ArrayList<>();
-    private ThreadInfo maxCapacityThreadInfo;
+    private List<SimpleThread> executionThreads = new ArrayList<>();
+    private SimpleThread maxCapacityThread;
 
     private Queue<Runnable> initialTasksQueue = new LinkedBlockingQueue<>();
     private boolean isRunning = false;
@@ -22,33 +21,45 @@ public class Balancer {
     public Balancer(int threadPoolSize, int maxQueueSizePerThread) {
         for (int threadNumber = 0; threadNumber < threadPoolSize; threadNumber++) {
             String threadName = String.format(THREAD_NAME_PATTERN, threadNumber);
-            executionThreads.add(
-                    new ThreadInfo(new SingleThread(threadName, maxQueueSizePerThread), maxQueueSizePerThread));
+            executionThreads.add(new SimpleThread(threadName, maxQueueSizePerThread));
         }
-        maxCapacityThreadInfo = executionThreads.get(0);
+        maxCapacityThread = executionThreads.get(0);
     }
 
     public boolean isRunning() {
         return isRunning;
     }
 
-    public void setRunning(boolean running) {
+    public Balancer setRunning(boolean running) {
         isRunning = running;
+        return this;
     }
 
     public void startBalancing() {
-        executionThreads.forEach(threadInfo -> threadInfo.getThread().setRunning(true).start());
+        executionThreads.forEach(threadInfo -> threadInfo.setRunning(true).start());
 
+        long time = System.currentTimeMillis();
         while (isRunning) {
-
-            Object task = initialTasksQueue.peek();
+            Runnable task = initialTasksQueue.peek();
             try {
-                if (task != null && maxCapacityThreadInfo.getThread().putTaskInQueue(task)) {
+                if (task == null) {
                     initialTasksQueue.poll();
-                    updateCurrentThreadInfo(maxCapacityThreadInfo);
+                    continue;
+                }
+
+                if (maxCapacityThread.putTaskInQueue(task)) {
+                    initialTasksQueue.poll();
                     LOGGER.info(String.format(
-                            "Task send to thread %s queue",
-                            maxCapacityThreadInfo.getThread().getThreadName()));
+                            "Task send to thread %s queue", maxCapacityThread.getThreadName()));
+
+                    findMaxCapacityQueueThread();
+
+                    LOGGER.debug(String.format(
+                            "Max queue space is in thread %s ", maxCapacityThread.getThreadName()));
+
+                    if(initialTasksQueue.isEmpty())
+                        LOGGER.debug(String.format(
+                                "Last task was send to executor in %f seconds ", (System.currentTimeMillis() - time)/1000F));
                 }
             } catch (InterruptedException e) {
                 LOGGER.error("Unable to put task into thread queue ", e);
@@ -61,19 +72,13 @@ public class Balancer {
         initialTasksQueue.add(task);
     }
 
-    private int getThreadQueueCapacity(SingleThread thread) {
-        return thread.getQueueCapacity();
-    }
-
-    private void updateCurrentThreadInfo(ThreadInfo currentThreadInfo) {
-        currentThreadInfo.setThreadQueueCapacity(currentThreadInfo.getThreadQueueCapacity());
-        int currentMaxCapacity = maxCapacityThreadInfo.getThreadQueueCapacity();
-
-        for (ThreadInfo threadInfo: executionThreads) {
-                int potentialMaxCapacity = threadInfo.getThreadQueueCapacity();
+    private void findMaxCapacityQueueThread() {
+        int currentMaxCapacity = maxCapacityThread.getQueueCapacity();
+        for (SimpleThread thread: executionThreads) {
+                int potentialMaxCapacity = thread.getQueueCapacity();
                 if (potentialMaxCapacity > currentMaxCapacity) {
                     currentMaxCapacity = potentialMaxCapacity;
-                    maxCapacityThreadInfo = threadInfo;
+                    maxCapacityThread = thread;
                 }
         }
     }
