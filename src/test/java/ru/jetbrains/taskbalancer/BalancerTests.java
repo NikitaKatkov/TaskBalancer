@@ -1,18 +1,20 @@
 package ru.jetbrains.taskbalancer;
 
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import ru.jetbrains.taskbalancer.threads.SimpleThread;
 import ru.jetbrains.taskbalancer.utils.Balancer;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 public class BalancerTests {
-    private Integer i1, i2, i3, i4, i5;
-    private Integer[] integerArray = {i1, i2, i3, i4, i5};
 
     @BeforeClass
     public static void init() {
@@ -48,15 +50,34 @@ public class BalancerTests {
         for (int index = 0; index < 5; index++) {
             int finalIndex = index;
             balancer.addTaskToQueue(() -> {
-                integerArray[finalIndex] = 1;
-                System.out.println(String.format("element %d updated", finalIndex));
+                File file = new File(finalIndex + ".txt");
+                try {
+                    file.createNewFile();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             });
         }
 
+        Thread.sleep(3000L);
+//        for (Future future: balancer.getExecutionResults()) {
+//            try {
+//                future.get();
+//            } catch (InterruptedException | ExecutionException e) {
+//                e.printStackTrace();
+//            }
+//        }
 
-        Thread.sleep(10000L); // ожидание выполнения с запасом времени //todo заменить
         balancer.setRunning(false);
-        Assert.assertTrue(Arrays.stream(integerArray).allMatch(Objects::nonNull));
 
+    }
+
+//    @AfterClass
+    public static void destroy() {
+        for (int i = 0; i < 5; i++) {
+            File file = new File(i + ".txt");
+            if (file.exists())
+                file.delete();
+        }
     }
 }
