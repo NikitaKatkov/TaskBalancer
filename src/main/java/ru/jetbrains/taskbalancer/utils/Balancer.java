@@ -5,10 +5,10 @@ import org.apache.log4j.Logger;
 import ru.jetbrains.taskbalancer.threads.SimpleThread;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class Balancer {
     private static final Logger LOGGER = LogManager.getLogger(Balancer.class);
@@ -17,9 +17,9 @@ public class Balancer {
     private List<SimpleThread> executionThreads = new ArrayList<>();
     private SimpleThread maxCapacityThread;
 
-    private List<Future> executionResults = new ArrayList<>(); //fixme Collections.syncList ??
+    private List<Future> executionResults = Collections.synchronizedList(new ArrayList<>());
 
-    private ConcurrentLinkedQueue<Runnable> initialTasksQueue = new ConcurrentLinkedQueue<>();
+    private LinkedBlockingQueue<Runnable> initialTasksQueue = new LinkedBlockingQueue<>();
     private boolean isRunning = false;
 
     public Balancer(int threadPoolSize, int maxQueueSizePerThread) {
@@ -40,8 +40,6 @@ public class Balancer {
     }
 
     public void startBalancing() {
-        executionThreads.forEach(threadInfo -> threadInfo.setRunning(true).start());
-
         while (isRunning) {
             Runnable task = initialTasksQueue.peek();
             if (task == null) {
@@ -51,21 +49,17 @@ public class Balancer {
 
             if (maxCapacityThread.getQueueCapacity() > 0) {
                 executionResults.add(
-                        CompletableFuture.runAsync(
-                                initialTasksQueue.poll(),
-                                maxCapacityThread
-                        )
+                        maxCapacityThread.putTaskInQueue(initialTasksQueue.poll())
                 );
 
-//                maxCapacityThread.execute(task);
-//                initialTasksQueue.poll();
                 LOGGER.info(String.format(
                         "Task send to thread %s queue", maxCapacityThread.getThreadName()));
+                LOGGER.debug(String.format(
+                        "Max queue space is in thread %s ", maxCapacityThread.getThreadName()));
             }
 
             findMaxCapacityQueueThread();
-            LOGGER.debug(String.format(
-                    "Max queue space is in thread %s ", maxCapacityThread.getThreadName()));
+
         }
         LOGGER.warn("Stop balancer execution");
     }
@@ -87,5 +81,9 @@ public class Balancer {
 
     public List<Future> getExecutionResults() {
         return executionResults;
+    }
+
+    public int getQueueSize() {
+        return initialTasksQueue.size();
     }
 }

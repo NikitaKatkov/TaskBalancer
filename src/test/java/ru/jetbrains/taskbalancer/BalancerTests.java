@@ -1,24 +1,19 @@
 package ru.jetbrains.taskbalancer;
 
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import ru.jetbrains.taskbalancer.threads.SimpleThread;
 import ru.jetbrains.taskbalancer.utils.Balancer;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-
 public class BalancerTests {
-
-    @BeforeClass
-    public static void init() {
-
+    private static int counter = 0;
+    private synchronized void incrementCounter() {
+        counter++;
+        try {
+            Thread.sleep(100); // имитация ресурсоемкой задачи
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     @Test
@@ -33,51 +28,48 @@ public class BalancerTests {
                 }
             });
         }
-        thread.setRunning(true).start();
-        // две задачи по 3 секунды точно не выполнятся сразу после запуска
-        Assert.assertEquals(1, thread.getQueueCapacity());
+        // первая задача в очереди начинает выполняться, вторая ожидает
+        Assert.assertEquals(2, thread.getQueueCapacity());
 
-        // и точно выполнятся после 7 секунд ожидания
+        // все задачи точно выполнятся после 7 секунд ожидания
         Thread.sleep(7000L);
         Assert.assertEquals(3, thread.getQueueCapacity());
     }
 
     @Test
-    public void testRuntimeTasksSubmitting() throws InterruptedException {
-        Balancer balancer = new Balancer(1, 1);
+    public void testTasksSubmitting() throws InterruptedException {
+        Balancer balancer = new Balancer(2, 3);
+        for (int i = 0; i < 3; i++) {
+            balancer.addTaskToQueue(this::incrementCounter);
+        }
         new Thread(() -> balancer.setRunning(true).startBalancing()).start();
+        Thread.sleep(400); // время с запасом
+        Assert.assertEquals(3, counter);
 
-        for (int index = 0; index < 5; index++) {
+        balancer.addTaskToQueue(this::incrementCounter);
+        balancer.setRunning(false);
+    }
+
+    @Test
+    public void testTaskOverhead() throws InterruptedException {
+        Balancer balancer = new Balancer(1, 2);
+        for (int index = 0; index < 4; index++) {
             int finalIndex = index;
             balancer.addTaskToQueue(() -> {
-                File file = new File(finalIndex + ".txt");
                 try {
-                    file.createNewFile();
-                } catch (IOException e) {
+                    Thread.sleep(1000L);
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+                System.out.println(finalIndex);
             });
         }
 
-        Thread.sleep(3000L);
-//        for (Future future: balancer.getExecutionResults()) {
-//            try {
-//                future.get();
-//            } catch (InterruptedException | ExecutionException e) {
-//                e.printStackTrace();
-//            }
-//        }
-
-        balancer.setRunning(false);
-
-    }
-
-//    @AfterClass
-    public static void destroy() {
-        for (int i = 0; i < 5; i++) {
-            File file = new File(i + ".txt");
-            if (file.exists())
-                file.delete();
-        }
+        Assert.assertEquals(4, balancer.getQueueSize());
+        new Thread(() -> balancer.setRunning(true).startBalancing()).start();
+        // максимальный размер очереди 2, работает 1 поток, значит через 500 мс после старта одна задача из очереди потока
+        // все еще будет обрабатываться, 2 задачи  будут ожидать в очереди потока и 1 задача - в очереди балансировщика
+        Thread.sleep(500L);
+        Assert.assertEquals(1, balancer.getQueueSize());
     }
 }
