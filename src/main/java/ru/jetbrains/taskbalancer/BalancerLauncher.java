@@ -13,7 +13,7 @@ public class BalancerLauncher {
 
     private static final int THREAD_POOL_SIZE = Runtime.getRuntime().availableProcessors() + 1;
     private static final int MAX_QUEUE_SIZE_PER_THREAD = 3;
-    private static final long WORKING_TIME_LIMIT = 30000L;
+    private static final long WORKING_TIME_LIMIT = 15000L;
 
     public static void main(String[] args) {
         Balancer balancer = new Balancer(THREAD_POOL_SIZE, MAX_QUEUE_SIZE_PER_THREAD);
@@ -28,6 +28,7 @@ public class BalancerLauncher {
             LOGGER_LAUNCHER.error("Unable to invoke Thread.sleep() method", e);
         }
         balancer.setRunning(false);
+        System.exit(0);
     }
 
     /**
@@ -41,7 +42,7 @@ public class BalancerLauncher {
             tasks.add(() -> {
                 // поместите сюда код для ваших задач
                 try {
-                    Thread.sleep(random.nextInt(2000));
+                    Thread.sleep(random.nextInt(200));
                 } catch (InterruptedException e) {
                     LOGGER_LAUNCHER.error("Error while trying to call Thread.sleep() method", e);
                 }
